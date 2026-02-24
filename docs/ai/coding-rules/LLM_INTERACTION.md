@@ -1,18 +1,35 @@
-# LLM Interaction / Prompt Injection
+# LLM Interaction & Prompt Injection Rules
 
-> **Audience:** You (the AI assistant). These are binding rules for when the code _you generate_ interacts with an LLM.
+> **Audience:** You (the AI assistant). These are binding rules for when the code _you generate_ interacts with an LLM, particularly concerning frontend implementations and user-facing UI.
 
-## 1. Model Input Integrity
+## 1. Client-Side API Keys & Direct Calls
 
-- **PROHIBITED:** Never concatenate raw user input directly into the body/text string of a prompt payload to an LLM endpoint.
-- **INSTEAD:** Always treat user string elements as hostile data arrays or explicitly place them in `<user-input>` tag boundaries. Explicitly supply defensive directives instructing the model to ignore manipulation inside those wrappers.
+- **PROHIBITED:** Never make direct HTTP calls to an LLM provider (e.g., OpenAI, Anthropic) directly from the frontend browser environment. Never embed LLM API keys in frontend code, `.env` files exposed to the client (like `VITE_OPENAI_KEY`), or client-side bundles.
+- **INSTEAD:** Always route LLM requests through a secure backend proxy or serverless function. The backend must attach the secret API key, perform rate limiting, validate the prompt payload, and ensure the user is authenticated and authorized before calling the LLM.
 
-## 2. Downstream Rendering of Model Responses
+## 2. Downstream Rendering of Model Responses (XSS Prevention)
 
-- **PROHIBITED:** Never treat the LLM response object text payload as trusted, sanitized HTML/Markdown output for immediate browser rendering (e.g., blindly using `innerHTML`).
-- **INSTEAD:** Always sanitize the LLM-generated string explicitly (e.g., passing it through `DOMPurify` locally, parsing markdown directly to sanitized tags) to ensure hallucinated `<script>` or event-handler tags don't execute client-side XSS.
+- **PROHIBITED:** Never treat the LLM response object text payload as trusted, sanitized HTML/Markdown output for immediate browser rendering (e.g., blindly using `v-html`, `dangerouslySetInnerHTML`, or `innerHTML`). LLMs can hallucinate or be victims of indirect prompt injection, returning active XSS payloads (e.g., `<script>alert(1)</script>` or `<img src=x onerror=...>`).
+- **INSTEAD:** Always sanitize the LLM-generated string explicitly before rendering. Use robust HTML sanitizers (like `DOMPurify`) mapped to strict configurations (stripping all scripts, object tags, and inline event handlers). If parsing Markdown, ensure the Markdown parser itself is configured to escape raw HTML and use DOMPurify on the resulting HTML string.
 
-## 3. Verifiable/Deterministic Fallbacks
+## 3. Streaming and Partial Data Handling
 
-- **PROHIBITED:** Never allow an API path containing AI logic execution to crash or act on uncontrolled/malformed string output internally (e.g., failing to parse LLM's raw string as generic JSON directly).
-- **INSTEAD:** Always attempt to restrict the model structure format natively (e.g., setting `response_format` JSON), wrap it with strict schema validation logic locally, and degrade gracefully, substituting an LLM evaluation for a hardcoded safe logic fallback in unexpected LLM network timeouts or format violations.
+- **PROHIBITED:** Never assume that streamed LLM chunks are valid JSON or safe to render incrementally without processing.
+- **INSTEAD:** When rendering streaming UI responses (like a ChatGPT interface), accumulate the stream properly. If streaming markdown, periodically or interactively run the accumulated string through a markdown parser and DOM sanitizer. Handle network disconnects or API errors gracefully within the stream without crashing the UI component.
+
+## 4. Model Input Integrity (Prompt Injection)
+
+- **PROHIBITED:** Never concatenate raw user input directly into the body/text string of a prompt payload (e.g., `prompt: "Summarize this: " + userInput`).
+- **INSTEAD:** Always treat user string elements as hostile data arrays or explicitly place them in system-defined prompt boundaries (like `<user-input>` XML tags). Explicitly supply defensive directives in the system message instructing the model to ignore manipulation inside those wrappers. On the backend, use structured message arrays (e.g., `{"role": "user", "content": userInput}`) rather than single-string concatenations.
+
+## 5. Verifiable/Deterministic Fallbacks
+
+- **PROHIBITED:** Never allow a UI flow containing AI logic execution to crash or lock the user out permanently on uncontrolled/malformed string output internally (e.g., expecting a JSON object but receiving a Markdown string from the LLM, causing a parsing exception).
+- **INSTEAD:**
+  - On the backend: Always attempt to restrict the model structure format natively (e.g., `response_format: { type: "json_object" }`).
+  - On the frontend: Always wrap the parsing of LLM responses in `try/catch` blocks with strict schema validation logic locally (e.g., Zod or manual type checking). Provide graceful UI degradation and generic fallback error states ("We couldn't process this request right now") if the LLM times out or returns malformed structures.
+
+## 6. Transparency and UX
+
+- **PROHIBITED:** Never present AI-generated content as absolute factual truth or obscure the fact that an AI generated the response in the UI.
+- **INSTEAD:** Always include UI indicators (like tooltips, badges, or disclaimers) that the content was generated by AI and may contain inaccuracies. Provide users with mechanisms to provide feedback (thumbs up/down) or report harmful/inaccurate outputs.
