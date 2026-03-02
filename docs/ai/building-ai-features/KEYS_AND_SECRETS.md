@@ -48,7 +48,9 @@ const apiKey = "sk-proj-abc123def456ghi789";
 // ✅ CORRECT — fail-fast validation
 const apiKey = process.env.OPENAI_API_KEY;
 if (!apiKey) {
-  throw new Error("OPENAI_API_KEY environment variable is required but not set.");
+  throw new Error(
+    "OPENAI_API_KEY environment variable is required but not set.",
+  );
 }
 ```
 
@@ -146,7 +148,7 @@ export async function POST(req: Request) {
 }
 
 // ❌ VIOLATION — secret in client component
-"use client";
+("use client");
 const apiKey = process.env.OPENAI_API_KEY; // This will be undefined (or worse, bundled if misconfigured)
 ```
 
@@ -187,7 +189,9 @@ export default defineConfig({
 
 ```typescript
 // ✅ CORRECT — frontend requests pre-signed URL from backend, then uploads directly
-const { uploadUrl } = await fetch("/api/upload/presign", { method: "POST" }).then(r => r.json());
+const { uploadUrl } = await fetch("/api/upload/presign", {
+  method: "POST",
+}).then((r) => r.json());
 await fetch(uploadUrl, { method: "PUT", body: file });
 
 // ❌ VIOLATION — AWS credentials in frontend
@@ -204,6 +208,19 @@ const s3 = new AWS.S3({ accessKeyId: "AKIA...", secretAccessKey: "..." });
 1. **ALWAYS** scan for patterns that resemble secrets: `sk-`, `Bearer `, `-----BEGIN`, `AKIA`, `ghp_`, `glpat-`, `xox[bpas]-`.
 2. **IF** you detect any, you MUST flag it immediately as a **critical security violation** and recommend remediation.
 3. **ALWAYS** recommend adding CI-level secret scanning (e.g., GitHub Secret Scanning, TruffleHog GitHub Action).
+
+---
+
+---
+
+## Rule 7 · Prompt Secret Scrubbing
+
+**WHEN** processing user input or developer prompts before sending them to an LLM:
+
+1. **ALWAYS** intercept and scrub potential secrets or API keys from the prompt text.
+2. **IF** a user or developer mistakenly pastes a secret key into the AI system prompt, the system **MUST NOT** forward that secret to the external LLM provider for security purposes.
+3. **ALWAYS** replace detected secrets with a safe placeholder (e.g., `[REDACTED_SECRET]`) before making the LLM API call.
+4. **ALWAYS** log the interception event (without logging the actual secret) for security auditing.
 
 ---
 
